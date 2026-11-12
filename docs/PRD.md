@@ -232,9 +232,10 @@ Terms used below:
 28. Quality: photos 82, static GIF 80, animated GIF 72, each filterable by
     kind and source MIME. PNG with transparency keeps alpha.
 29. Colour: if the source has an embedded colour profile, convert to sRGB
-    before stripping metadata, or keep the profile. Never strip a non-sRGB
-    profile without converting (the image shifts colour). CMYK JPEG is
-    converted to sRGB or skipped.
+    before stripping metadata. If the encoder cannot convert, keep the profile
+    in the output. Never strip a non-sRGB profile without converting (the
+    image shifts colour). If neither is possible (for example a CMYK JPEG on
+    GD), skip the file with reason `colour-profile`.
 30. Animated GIF: all frames are coalesced and written as animated WebP with
     the original timing and loop count. A GIF over the frame limit (default
     300 frames) is skipped.
@@ -528,7 +529,7 @@ any match), `min_width`, `max_width` (px, inclusive).
 | `srcset_truth_template` | string | none | computed key |
 | `srcset_truth_slot` | ?string | context array | null |
 | `srcset_truth_should_correct` | bool | sizes value, context | true for core default only |
-| `srcset_truth_sizes` | string | context | the compiled value (last word) |
+| `srcset_truth_sizes` | string | context | the validated compiled value, which the filter may replace (the result is validated again, case 22) |
 | `srcset_truth_webp_enabled` | bool | none | setting |
 | `srcset_truth_webp_quality` | int 1 to 100 | kind (`photo`, `graphic`, `animated`), MIME | 82, 80, 72 |
 | `srcset_truth_webp_sizes` | list of size names | attachment ID | `medium`, `medium_large`, `large` |
@@ -795,6 +796,8 @@ message when the encoder is absent.
 73. Uninstall removes options, lock, cron event and meta, and leaves files;
     `remove-siblings` removes only recorded siblings (6).
 74. Settings sanitisation rejects out-of-range quality and invalid modes (8).
+75. The README documents the bold warning about syncing `.webp` files and the
+    advice to turn off WebP serving behind an image-converting CDN (73, 74).
 
 ## 13. Open questions
 
@@ -837,9 +840,9 @@ Answer each in `docs/ARCHITECTURE.md`.
 6. Use `<picture>`, not `Accept` negotiation. Common CDNs do not vary their
    image cache on `Accept`, so a negotiated URL can hand WebP to a client that
    cannot render it.
-7. Theme-rendered originals hurt most. One animated GIF original was 61% of a
-   home page's payload because the theme printed the full file. Animated WebP
-   cut such files by roughly 90% with the animation intact. Convert GIFs, keep
+7. Theme-rendered originals hurt most. A single animated GIF original can
+   outweigh the rest of a home page when the theme prints the full file.
+   Animated WebP is far smaller with the animation intact. Convert GIFs, keep
    the animation, and keep only results that are smaller.
 8. Under-declaring `sizes` is worse than over-declaring. With no map entry,
    leave core's value; a guess that is too small makes images blurry on real
@@ -848,7 +851,7 @@ Answer each in `docs/ARCHITECTURE.md`.
    thumbnails come first. Width alone is not enough (a wide logo passes a
    600 px test); require a photo-like aspect ratio and exclude branding.
 10. Spending the priority hint on the wrong image left the real hero lazy,
-    and load delay was nearly half of a five-second LCP. `fetchpriority` alone
+    and most of the LCP time was load delay. `fetchpriority` alone
     only reorders a request the browser has already found; pair it with a
     preload in the head.
 11. Themes duplicate attributes. Strip every `loading`, `fetchpriority` and
