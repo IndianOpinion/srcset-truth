@@ -23,7 +23,10 @@ use IndianOpinion\SrcsetTruth\Sizes\Evaluator;
  * Before-and-after image weight of one page of this site (PRD 4.12).
  *
  * @phpstan-type Pick array{url: string, width: ?int, bytes: ?int, format: string}
- * @phpstan-type Row array{index: int, src: string, template: ?string, slot: ?string, sizes: ?string, before: Pick|null, after: Pick|null, flags: list<string>, missing_width: ?int, unknown: bool}
+ * @phpstan-type Row array{
+ *     index: int, src: string, template: ?string, slot: ?string, sizes: ?string,
+ *     before: Pick|null, after: Pick|null, flags: list<string>, missing_width: ?int, unknown: bool
+ * }
  * @phpstan-type Totals array{images: int, counted: int, before_bytes: int, after_bytes: int, saving_kib: float, saving_percent: float}
  * @phpstan-type Report array{url: string, viewport: array{width: float, dpr: float}, images: list<Row>, totals: Totals}
  */
@@ -243,7 +246,7 @@ final class Auditor
         $afterSlot = Evaluator::slotWidth($afterSizes ?? '100vw', $this->width);
         $beforeIndex = $beforeSlot === null ? null : Picker::pick($original, $beforeSlot, $this->dpr);
         $afterIndex = $afterSlot === null ? null : Picker::pick($after, $afterSlot, $this->dpr);
-        if ($beforeIndex === null || $afterIndex === null || $afterSlot === null) {
+        if ($beforeIndex === null || $afterIndex === null) {
             $result['unknown'] = true;
             $result['flags'] = array_values(array_unique(array_merge($flags, $mapFlags)));
 

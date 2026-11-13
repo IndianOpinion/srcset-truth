@@ -22,7 +22,8 @@ final class WpdbAttachmentSource implements AttachmentSource
             );
         } else {
             $sql = $wpdb->prepare(
-                "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type IN (" . self::TYPES . ") AND ID < %d ORDER BY ID DESC LIMIT %d",
+                "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type IN (" . self::TYPES . ")"
+                    . ' AND ID < %d ORDER BY ID DESC LIMIT %d',
                 $below,
                 $limit
             );
@@ -35,7 +36,8 @@ final class WpdbAttachmentSource implements AttachmentSource
     {
         global $wpdb;
         $sql = $wpdb->prepare(
-            "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type IN (" . self::TYPES . ") AND post_date >= %s ORDER BY ID DESC LIMIT %d OFFSET %d",
+            "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type IN (" . self::TYPES . ")"
+                . ' AND post_date >= %s ORDER BY ID DESC LIMIT %d OFFSET %d',
             $date,
             max(1, $limit),
             max(0, $offset)

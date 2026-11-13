@@ -32,13 +32,24 @@ final class SettingsPage
             'debug' => __('Debug log', 'srcset-truth'),
         ];
         foreach ($fields as $key => $label) {
-            add_settings_field('srcset-truth-' . $key, $label, [self::class, 'field'], 'media', 'srcset-truth', ['key' => $key, 'label_for' => 'srcset-truth-' . $key]);
+            add_settings_field(
+                'srcset-truth-' . $key,
+                $label,
+                [self::class, 'field'],
+                'media',
+                'srcset-truth',
+                ['key' => $key, 'label_for' => 'srcset-truth-' . $key]
+            );
         }
     }
 
     public static function intro(): void
     {
-        echo '<p>' . esc_html__('Corrects the sizes attribute for images in fixed slots and serves WebP copies. Slot widths come from your theme through filters; see the plugin README.', 'srcset-truth') . '</p>';
+        echo '<p>' . esc_html__(
+            // phpcs:ignore Generic.Files.LineLength.TooLong -- one translatable string.
+            'Corrects the sizes attribute for images in fixed slots and serves WebP copies. Slot widths come from your theme through filters; see the plugin README.',
+            'srcset-truth'
+        ) . '</p>';
     }
 
     /**
@@ -52,10 +63,18 @@ final class SettingsPage
         $id = 'srcset-truth-' . $key;
         switch ($key) {
             case 'quality':
-                printf('<input type="number" min="1" max="100" step="1" id="%s" name="%s" value="%d" class="small-text">', esc_attr($id), esc_attr($name), (int) $value);
+                printf(
+                    '<input type="number" min="1" max="100" step="1" id="%s" name="%s" value="%d" class="small-text">',
+                    esc_attr($id),
+                    esc_attr($name),
+                    (int) $value
+                );
                 break;
             case 'mode':
-                self::select($id, $name, (string) $value, ['filter' => __('Filter (default)', 'srcset-truth'), 'buffer' => __('Buffer (whole page)', 'srcset-truth')]);
+                self::select($id, $name, (string) $value, [
+                    'filter' => __('Filter (default)', 'srcset-truth'),
+                    'buffer' => __('Buffer (whole page)', 'srcset-truth'),
+                ]);
                 break;
             case 'preset':
                 self::select($id, $name, (string) $value, ['none' => __('None', 'srcset-truth'), 'grid' => __('Card grid', 'srcset-truth')]);

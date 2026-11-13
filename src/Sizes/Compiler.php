@@ -57,7 +57,8 @@ final class Compiler
             }
             [$breakpoint, $length] = $pair;
             if (!is_string($length) || !Grammar::isLength($length)) {
-                throw new InvalidSizesSpec(sprintf('Invalid length in breakpoint pair: "%s".', self::preview(is_scalar($length) ? (string) $length : gettype($length))));
+                $shown = self::preview(is_scalar($length) ? (string) $length : gettype($length));
+                throw new InvalidSizesSpec(sprintf('Invalid length in breakpoint pair: "%s".', $shown));
             }
             if ($breakpoint === null) {
                 $nullCount++;

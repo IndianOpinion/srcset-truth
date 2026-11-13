@@ -206,7 +206,8 @@ final class LayoutTest extends TestCase
         self::assertSame('(max-width: 767px) 100vw, (max-width: 1200px) 90vw, 1200px', $hero['sizes']);
         $card = Corrector::correct('(max-width: 768px) 100vw, 768px', ['template' => 'front', 'image_width' => 768, 'source' => 'thumbnail'], false, true);
         self::assertSame('(max-width: 767px) 92vw, (max-width: 1024px) 46vw, 380px', $card['sizes']);
-        $content = Corrector::correct('(max-width: 1024px) 100vw, 1024px', ['template' => 'single-post', 'image_width' => 1024, 'source' => 'content'], false, true);
+        $context = ['template' => 'single-post', 'image_width' => 1024, 'source' => 'content'];
+        $content = Corrector::correct('(max-width: 1024px) 100vw, 1024px', $context, false, true);
         // Content width 1200, capped at the image's own 1024.
         self::assertSame('(max-width: 1200px) 100vw, 1024px', $content['sizes']);
         self::assertSame('content', $content['context']['slot']);

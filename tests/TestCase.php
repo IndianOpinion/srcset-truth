@@ -189,7 +189,8 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase
         $base = \WPStub::$baseurl . '/2026/11/' . $stem;
 
         return sprintf(
-            '<img src="%1$s-1024x576.jpg" srcset="%1$s-1024x576.jpg 1024w, %1$s-300x169.jpg 300w, %1$s-768x432.jpg 768w" sizes="auto, (max-width: 1024px) 100vw, 1024px" width="1024" height="576" loading="lazy" class="wp-image-7 size-large"%2$s>',
+            '<img src="%1$s-1024x576.jpg" srcset="%1$s-1024x576.jpg 1024w, %1$s-300x169.jpg 300w, %1$s-768x432.jpg 768w"'
+            . ' sizes="auto, (max-width: 1024px) 100vw, 1024px" width="1024" height="576" loading="lazy" class="wp-image-7 size-large"%2$s>',
             $base,
             $extra
         );

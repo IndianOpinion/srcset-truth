@@ -10,7 +10,13 @@ require_once __DIR__ . '/stubs/wp-cli.php';
 // The real WordPress HTML API (6.4, the minimum supported), from the
 // johnpbloch/wordpress-core dev dependency.
 $srcsetTruthHtmlApi = __DIR__ . '/../vendor/johnpbloch/wordpress-core/wp-includes/html-api/';
-foreach (['class-wp-html-attribute-token.php', 'class-wp-html-span.php', 'class-wp-html-text-replacement.php', 'class-wp-html-tag-processor.php'] as $srcsetTruthFile) {
+$srcsetTruthFiles = [
+    'class-wp-html-attribute-token.php',
+    'class-wp-html-span.php',
+    'class-wp-html-text-replacement.php',
+    'class-wp-html-tag-processor.php',
+];
+foreach ($srcsetTruthFiles as $srcsetTruthFile) {
     require_once $srcsetTruthHtmlApi . $srcsetTruthFile;
 }
 

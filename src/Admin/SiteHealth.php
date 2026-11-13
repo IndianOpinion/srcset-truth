@@ -57,10 +57,20 @@ final class SiteHealth
     {
         $name = EncoderFactory::describe();
         if ($name === 'none') {
-            return self::result('srcset_truth_encoder', 'recommended', __('No WebP encoder is available', 'srcset-truth'), __('Neither Imagick with WebP nor GD with WebP was found, so no siblings are created. Sizes correction still works.', 'srcset-truth'));
+            return self::result(
+                'srcset_truth_encoder',
+                'recommended',
+                __('No WebP encoder is available', 'srcset-truth'),
+                __('Neither Imagick with WebP nor GD with WebP was found, so no siblings are created. Sizes correction still works.', 'srcset-truth')
+            );
         }
 
-        return self::result('srcset_truth_encoder', 'good', __('A WebP encoder is available', 'srcset-truth'), sprintf(__('Encoder: %s.', 'srcset-truth'), $name));
+        return self::result(
+            'srcset_truth_encoder',
+            'good',
+            __('A WebP encoder is available', 'srcset-truth'),
+            sprintf(__('Encoder: %s.', 'srcset-truth'), $name)
+        );
     }
 
     /**
@@ -72,11 +82,21 @@ final class SiteHealth
     {
         $siblingUrl = $siblingUrl ?? self::findSiblingUrl();
         if ($siblingUrl === null) {
-            return self::result('srcset_truth_content_type', 'good', __('No WebP sibling to check yet', 'srcset-truth'), __('The check runs once a sibling exists.', 'srcset-truth'));
+            return self::result(
+                'srcset_truth_content_type',
+                'good',
+                __('No WebP sibling to check yet', 'srcset-truth'),
+                __('The check runs once a sibling exists.', 'srcset-truth')
+            );
         }
         $response = wp_remote_head($siblingUrl, ['timeout' => 5, 'redirection' => 0]);
         if (is_wp_error($response)) {
-            return self::result('srcset_truth_content_type', 'recommended', __('Could not request a WebP sibling', 'srcset-truth'), $response->get_error_message());
+            return self::result(
+                'srcset_truth_content_type',
+                'recommended',
+                __('Could not request a WebP sibling', 'srcset-truth'),
+                $response->get_error_message()
+            );
         }
         $type = strtolower(trim(explode(';', Http::header($response, 'content-type'))[0]));
         if ($type !== 'image/webp') {
@@ -84,7 +104,12 @@ final class SiteHealth
                 'srcset_truth_content_type',
                 'critical',
                 __('WebP files are served with the wrong content type', 'srcset-truth'),
-                sprintf(__('%1$s was served as "%2$s". Some browsers refuse to render WebP that is not sent as image/webp. Add webp to the web server MIME types.', 'srcset-truth'), $siblingUrl, $type === '' ? 'none' : $type)
+                sprintf(
+                    // phpcs:ignore Generic.Files.LineLength.TooLong -- one translatable string.
+                    __('%1$s was served as "%2$s". Some browsers refuse to render WebP that is not sent as image/webp. Add webp to the web server MIME types.', 'srcset-truth'),
+                    $siblingUrl,
+                    $type === '' ? 'none' : $type
+                )
             );
         }
 
@@ -97,14 +122,29 @@ final class SiteHealth
     public static function backfill(): array
     {
         if (!Backfill::enabled()) {
-            return self::result('srcset_truth_backfill', 'good', __('The WebP backfill is off', 'srcset-truth'), __('New uploads still get siblings at upload time.', 'srcset-truth'));
+            return self::result(
+                'srcset_truth_backfill',
+                'good',
+                __('The WebP backfill is off', 'srcset-truth'),
+                __('New uploads still get siblings at upload time.', 'srcset-truth')
+            );
         }
         $state = Backfill::state();
         if ($state['last_run'] < time() - 3600) {
-            return self::result('srcset_truth_backfill', 'recommended', __('The WebP backfill has not run in the last hour', 'srcset-truth'), __('Check that WP-Cron runs (or a real cron calls wp-cron.php).', 'srcset-truth'));
+            return self::result(
+                'srcset_truth_backfill',
+                'recommended',
+                __('The WebP backfill has not run in the last hour', 'srcset-truth'),
+                __('Check that WP-Cron runs (or a real cron calls wp-cron.php).', 'srcset-truth')
+            );
         }
 
-        return self::result('srcset_truth_backfill', 'good', __('The WebP backfill ran in the last hour', 'srcset-truth'), sprintf(__('Last run: %d created, %d failed.', 'srcset-truth'), $state['last_done'], $state['last_failed']));
+        return self::result(
+            'srcset_truth_backfill',
+            'good',
+            __('The WebP backfill ran in the last hour', 'srcset-truth'),
+            sprintf(__('Last run: %d created, %d failed.', 'srcset-truth'), $state['last_done'], $state['last_failed'])
+        );
     }
 
     /**
@@ -131,7 +171,12 @@ final class SiteHealth
             'srcset_truth_coverage',
             $share >= 80 ? 'good' : 'recommended',
             sprintf(__('%d%% of recent originals have a fresh WebP sibling', 'srcset-truth'), $share),
-            sprintf(__('%1$d of %2$d files in the newest %3$d image attachments. Files skipped as not beneficial count as missing.', 'srcset-truth'), $fresh, $total, self::SAMPLE)
+            sprintf(
+                __('%1$d of %2$d files in the newest %3$d image attachments. Files skipped as not beneficial count as missing.', 'srcset-truth'),
+                $fresh,
+                $total,
+                self::SAMPLE
+            )
         );
     }
 

@@ -124,7 +124,10 @@ final class Corrector
             }
             self::$compiled[$key] = Compiler::compile($spec, $width > 0 ? $width : null);
         } catch (InvalidSizesSpec $e) {
-            Logger::once('invalid-spec:' . $template . ':' . $slot, sprintf('Template "%s", slot "%s": %s Core value kept.', $template, $slot, $e->getMessage()));
+            Logger::once(
+                'invalid-spec:' . $template . ':' . $slot,
+                sprintf('Template "%s", slot "%s": %s Core value kept.', $template, $slot, $e->getMessage())
+            );
             self::$compiled[$key] = false;
         }
 

@@ -134,10 +134,16 @@ final class SizesTest extends TestCase
     public function testT10AllThreePathsAgree(): void
     {
         $this->cardMap();
-        \WPStub::$attachmentMeta[7] = ['file' => '2026/11/photo.jpg', 'width' => 2048, 'height' => 1152, 'sizes' => ['large' => ['file' => 'photo-1024x576.jpg', 'width' => 1024, 'height' => 576]]];
+        \WPStub::$attachmentMeta[7] = [
+            'file' => '2026/11/photo.jpg',
+            'width' => 2048,
+            'height' => 1152,
+            'sizes' => ['large' => ['file' => 'photo-1024x576.jpg', 'width' => 1024, 'height' => 576]],
+        ];
         $content = FilterMode::contentImage($this->cardTag(), '', 7);
         $thumb = FilterMode::thumbnail($this->cardTag(), 1, 7, 'large');
-        $attr = FilterMode::attachmentAttributes(['src' => 'x', 'srcset' => 'x 1024w', 'sizes' => 'auto, (max-width: 1024px) 100vw, 1024px', 'loading' => 'lazy'], (object) ['ID' => 7], 'large');
+        $given = ['src' => 'x', 'srcset' => 'x 1024w', 'sizes' => 'auto, (max-width: 1024px) 100vw, 1024px', 'loading' => 'lazy'];
+        $attr = FilterMode::attachmentAttributes($given, (object) ['ID' => 7], 'large');
         $expected = 'auto, ' . self::CARD;
         self::assertStringContainsString('sizes="' . $expected . '"', (string) $content);
         self::assertSame($content, $thumb);

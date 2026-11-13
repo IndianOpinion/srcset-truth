@@ -15,10 +15,10 @@
         <!-- WordPress entry points declare and run in one file by design. -->
         <exclude name="PSR1.Files.SideEffects.FoundWithSymbols"/>
     </rule>
-    <!-- Translatable strings and HTML fixtures stay on one line for grep and translators. -->
+    <!-- PSR-12 soft limit is 120. Raised to 160 so translatable strings and HTML fixtures stay whole on one line for translators and grep; code is wrapped. -->
     <rule ref="Generic.Files.LineLength">
         <properties>
-            <property name="lineLimit" value="300"/>
+            <property name="lineLimit" value="160"/>
             <property name="absoluteLineLimit" value="0"/>
         </properties>
     </rule>

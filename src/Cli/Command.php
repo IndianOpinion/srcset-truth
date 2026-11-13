@@ -74,7 +74,8 @@ final class Command
             return;
         }
         \WP_CLI::line(sprintf('Page: %s', $report['url']));
-        \WP_CLI::line(sprintf('Viewport: %d px at DPR %s (pick rule: smallest candidate with density >= DPR).', (int) $width, rtrim(rtrim(number_format($dpr, 3, '.', ''), '0'), '.')));
+        $dprText = rtrim(rtrim(number_format($dpr, 3, '.', ''), '0'), '.');
+        \WP_CLI::line(sprintf('Viewport: %d px at DPR %s (pick rule: smallest candidate with density >= DPR).', (int) $width, $dprText));
         $items = [];
         foreach ($report['images'] as $row) {
             $items[] = [
@@ -83,7 +84,9 @@ final class Command
                 'sizes' => $row['sizes'] ?? '-',
                 'before' => self::pickText($row['before']),
                 'after' => self::pickText($row['after']),
-                'flags' => implode(' ', $row['flags']) . ($row['missing_width'] !== null ? ' (need ' . $row['missing_width'] . 'w)' : '') . ($row['unknown'] ? ' unknown' : ''),
+                'flags' => implode(' ', $row['flags'])
+                    . ($row['missing_width'] !== null ? ' (need ' . $row['missing_width'] . 'w)' : '')
+                    . ($row['unknown'] ? ' unknown' : ''),
             ];
         }
         if ($items !== []) {
@@ -105,7 +108,10 @@ final class Command
             return '-';
         }
 
-        return sprintf('%s %s %s', $pick['width'] !== null ? $pick['width'] . 'w' : '1x', $pick['format'], $pick['bytes'] !== null ? number_format($pick['bytes'] / 1024, 1) . ' KiB' : '? KiB');
+        $width = $pick['width'] !== null ? $pick['width'] . 'w' : '1x';
+        $bytes = $pick['bytes'] !== null ? number_format($pick['bytes'] / 1024, 1) . ' KiB' : '? KiB';
+
+        return sprintf('%s %s %s', $width, $pick['format'], $bytes);
     }
 
     /**
@@ -146,7 +152,8 @@ final class Command
                 if ($dry) {
                     $state = is_file($file) ? Siblings::state($file) : 'gone';
                     $mime = ImageType::sniff($file);
-                    if ($state !== 'fresh' && $state !== 'gone' && $mime !== null && in_array($mime, ImageType::SOURCE_TYPES, true) && SkipLedger::reason($file) === null) {
+                    $inScope = $mime !== null && in_array($mime, ImageType::SOURCE_TYPES, true);
+                    if ($state !== 'fresh' && $state !== 'gone' && $inScope && SkipLedger::reason($file) === null) {
                         $counts['would-create']++;
                     }
                     continue;
@@ -258,7 +265,12 @@ final class Command
         ));
         \WP_CLI::line('Backfill: ' . (Backfill::enabled() ? 'on' : 'off'));
         \WP_CLI::line('Cursor: ' . ($state['cursor'] === null ? 'top (newest)' : 'below ID ' . $state['cursor']));
-        \WP_CLI::line('Last backfill: ' . ($state['last_run'] > 0 ? gmdate('Y-m-d H:i:s', $state['last_run']) . sprintf(' UTC (%d created, %d failed, %.1fs)', $state['last_done'], $state['last_failed'], $state['last_seconds']) : 'never'));
+        $last = 'never';
+        if ($state['last_run'] > 0) {
+            $last = gmdate('Y-m-d H:i:s', $state['last_run'])
+                . sprintf(' UTC (%d created, %d failed, %.1fs)', $state['last_done'], $state['last_failed'], $state['last_seconds']);
+        }
+        \WP_CLI::line('Last backfill: ' . $last);
         \WP_CLI::line('Last full pass: ' . ($state['last_full_pass'] > 0 ? gmdate('Y-m-d H:i:s', $state['last_full_pass']) . ' UTC' : 'not yet'));
         \WP_CLI::line('Lock: ' . Backfill::lockState());
     }

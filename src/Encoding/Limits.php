@@ -20,10 +20,12 @@ final class Limits
             return $defaults;
         }
 
+        $positive = static fn (string $key): bool => isset($limits[$key]) && is_numeric($limits[$key]) && $limits[$key] > 0;
+
         return [
-            'megapixels' => isset($limits['megapixels']) && is_numeric($limits['megapixels']) && $limits['megapixels'] > 0 ? (float) $limits['megapixels'] : $defaults['megapixels'],
-            'bytes' => isset($limits['bytes']) && is_numeric($limits['bytes']) && $limits['bytes'] > 0 ? (int) $limits['bytes'] : $defaults['bytes'],
-            'frames' => isset($limits['frames']) && is_numeric($limits['frames']) && $limits['frames'] > 0 ? (int) $limits['frames'] : $defaults['frames'],
+            'megapixels' => $positive('megapixels') ? (float) $limits['megapixels'] : $defaults['megapixels'],
+            'bytes' => $positive('bytes') ? (int) $limits['bytes'] : $defaults['bytes'],
+            'frames' => $positive('frames') ? (int) $limits['frames'] : $defaults['frames'],
         ];
     }
 }

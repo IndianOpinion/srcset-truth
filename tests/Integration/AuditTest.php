@@ -143,7 +143,14 @@ final class AuditTest extends TestCase
         self::assertSame(['url', 'width', 'bytes', 'format'], array_keys($json['images'][0]['before']));
         $b = filesize($this->uploads . '/2026/11/photo-1024x576.jpg');
         $a = filesize($this->uploads . '/2026/11/photo-768x432.jpg');
-        self::assertSame(['images' => 2, 'counted' => 1, 'before_bytes' => $b, 'after_bytes' => $a, 'saving_kib' => round(($b - $a) / 1024, 1), 'saving_percent' => round(($b - $a) * 100 / $b, 1)], $json['totals']);
+        self::assertSame([
+            'images' => 2,
+            'counted' => 1,
+            'before_bytes' => $b,
+            'after_bytes' => $a,
+            'saving_kib' => round(($b - $a) / 1024, 1),
+            'saving_percent' => round(($b - $a) * 100 / $b, 1),
+        ], $json['totals']);
 
         \WP_CLI::reset();
         (new Command())->audit(['/'], []);
