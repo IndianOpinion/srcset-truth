@@ -12,7 +12,7 @@ Corrects the sizes attribute for images painted into fixed slots, serves WebP si
 
 == Description ==
 
-WordPress tells the browser that every image is as wide as the screen, so phones download far larger files than the slot needs. srcset-truth replaces that `sizes` value with the real width of the slot (from a width map your theme supplies, or the card-grid preset), writes WebP copies next to the originals at upload and in a background backfill, and serves them with the same URLs for every visitor.
+WordPress tells the browser that every image is as wide as the screen, so phones download far larger files than the slot needs. srcset-truth replaces that `sizes` value with the real width of the slot (from a width map your theme supplies, or the card-grid preset), writes WebP copies next to the originals at upload and in a background backfill, and serves them through `<picture>`, with the same HTML for every visitor.
 
 * One classifier for content images, featured images, attachment images and (in buffer mode) theme-hard-coded tags.
 * WebP siblings named `photo.jpg.webp`, created only when smaller, never during a page request.

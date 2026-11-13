@@ -153,7 +153,8 @@ final class AdminTest extends TestCase
         \WPStub::$postMeta[7]['_srcset_truth'] = ['old'];
         define('WP_UNINSTALL_PLUGIN', 'srcset-truth/srcset-truth.php');
         require dirname(__DIR__, 2) . '/uninstall.php';
-        self::assertSame([], array_intersect(array_keys(\WPStub::$options), [Settings::OPTION, Backfill::STATE_OPTION, Backfill::LOCK_OPTION, SkipLedger::OPTION]));
+        $ours = [Settings::OPTION, Backfill::STATE_OPTION, Backfill::LOCK_OPTION, SkipLedger::OPTION];
+        self::assertSame([], array_intersect(array_keys(\WPStub::$options), $ours));
         self::assertSame([], \WPStub::$cron);
         self::assertArrayNotHasKey('_srcset_truth', \WPStub::$postMeta[7]);
         self::assertFileExists($files['large'] . '.webp', 'uninstall keeps sibling files');
@@ -243,5 +244,33 @@ final class AdminTest extends TestCase
         $_SERVER['HTTP_X_SRCSET_TRUTH_AUDIT'] = str_repeat('a', 32);
         $this->cardMap();
         self::assertStringNotContainsString('data-srcset-truth', (string) FilterMode::contentImage($this->cardTag(), '', 7));
+    }
+
+    public function testAuditTokenWindowsAndCacheBypass(): void
+    {
+        $now = time();
+        $cases = [
+            [Plugin::auditToken($now), true],
+            [Plugin::auditToken($now - 300), true],
+            [Plugin::auditToken($now - 600), false],
+            [Plugin::auditToken($now + 600), false],
+            [strtoupper(Plugin::auditToken($now)), false],
+            [substr(Plugin::auditToken($now), 0, 31), false],
+        ];
+        foreach ($cases as [$token, $accepted]) {
+            Plugin::resetRequest();
+            $_SERVER['HTTP_X_SRCSET_TRUTH_AUDIT'] = $token;
+            self::assertSame($accepted, Plugin::auditMode(), $token);
+        }
+        // The token is not a core nonce over the same salt.
+        self::assertNotSame(substr(hash_hmac('sha256', 'srcset-truth-audit|' . intdiv($now, 300), wp_salt('nonce')), 0, 32), Plugin::auditToken($now));
+        unset($_SERVER['HTTP_X_SRCSET_TRUTH_AUDIT']);
+        Plugin::resetRequest();
+        Plugin::sendHeaders();
+        self::assertSame([], Response::$sent, 'no token, no headers');
+        $_SERVER['HTTP_X_SRCSET_TRUTH_AUDIT'] = Plugin::auditToken();
+        Plugin::resetRequest();
+        Plugin::sendHeaders();
+        self::assertTrue(defined('DONOTCACHEPAGE') && constant('DONOTCACHEPAGE') === true);
     }
 }

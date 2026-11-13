@@ -30,12 +30,12 @@ specified in [PRD.md](PRD.md); case numbers below refer to it.
 Page request, filter mode:
 
 ```
-wp_content_img_tag / post_thumbnail_html / wp_get_attachment_image_attributes
+wp_content_img_tag / post_thumbnail_html / wp_get_attachment_image(_attributes)
   -> Request::isFrontHtml()            (else unchanged)
   -> ImageProcessor::process()         (tag processor paused on the IMG)
        -> Corrector::correct()         core default? template, slot, map, compile, cap, validate, auto rule
        -> WebpPlanner::plan()          skip rules, URL -> path, Siblings::isFresh() (memoised stat)
-       -> rewrite srcset/src in place  (default)  or  mark for <picture> (opt-in)
+       -> mark for <picture> (default)  or  rewrite srcset/src in place (opt-in)
   -> Wrapper::apply()                  only when wrapping
 ```
 
@@ -69,21 +69,36 @@ newest down with a stored cursor. Delete: `delete_attachment` and
    they live in one non-autoloaded option keyed by the path under uploads,
    with the source's modification time and size. A changed original no
    longer matches its entry and is tried again. The option is capped at
-   10,000 entries (oldest dropped first), so the worst case is a retry, never
-   unbounded growth. `no-encoder` is not recorded, because it is a property
+   10,000 entries (oldest dropped first, about 1.4 MB serialised), so the
+   worst case is a retry, never unbounded growth. It is read only by
+   upload, backfill and WP-CLI, never on a page view. Every write re-reads
+   the stored option first (dropping the object cache entry), so a long
+   backfill or `generate` run cannot overwrite records an upload added
+   meanwhile; two writes in the same instant can still lose one record,
+   which again only costs one retry. A table or row lock would close that
+   gap and was judged not worth it for a negative cache. `no-encoder` is not recorded, because it is a property
    of the server, not the file.
-3. **`<picture>` wrapping is opt-in behind `srcset_truth_picture_wrap`,
-   default off.** Ruling. The default path is type-aware srcset rewriting:
-   each candidate of the `<img>` (and `src`) whose original is a JPEG, PNG or
-   GIF with a fresh sibling gets the sibling URL, in place, with its
-   descriptor; every other candidate keeps its URL. The theme's markup and
-   CSS are untouched, which answers the CSS question for most sites. Cost:
-   browsers without WebP (Safari before 14) get images they cannot render;
-   sites that care turn wrapping on. When wrapping is on, the plugin prints
+3. **WebP is served through `<picture>` by default; in-place rewriting is
+   an opt-in (`srcset_truth_picture_wrap` returning `false`).** Ruling,
+   changed at review before 0.1.0. The first build defaulted to rewriting
+   the `<img>`'s own `src` and `srcset` to `.webp` URLs. That hands WebP to
+   every browser, and one without WebP (Safari before 14, iOS 13 and older,
+   old Android WebViews, some embedded and e-reader browsers, and any tool
+   that saves or re-serves the `src`) shows a broken image with no fallback.
+   It is the failure PRD goal 3 and lesson 6 exist to avoid, only moved from
+   the CDN to the browser, and a general-purpose plugin cannot know its
+   audience. Swapping only the `srcset` candidates and leaving `src` alone
+   was considered and rejected: every browser that lacks WebP but supports
+   `srcset` (Safari 9 to 13) picks from `srcset`, so it breaks the same
+   browsers. `<picture>` costs one element per image and is safe everywhere,
+   so it is the default. The answer to the CSS question: the plugin prints
    `picture.srcset-truth{display:contents}` (filter
-   `srcset_truth_picture_css`) so flex and grid children keep their layout.
-   Child selectors like `.card > img` still stop matching; that is
-   documented, not hidden.
+   `srcset_truth_picture_css`) so the `<picture>` generates no box and flex
+   and grid layouts see the `<img>` as before; child selectors such as
+   `.card > img` stop matching, which the README states with the fix. Sites
+   that accept the trade can still choose in-place rewriting, which keeps
+   the markup and is type-aware (only JPEG, PNG and GIF candidates with a
+   fresh sibling change, each in position with its descriptor).
 4. **AVIF is out of 0.1.0** and noted under Unreleased in the changelog.
    Ruling. For 0.2.0: AVIF encodes are several times slower than WebP,
    Imagick needs libheif with AVIF write support and GD only has it from PHP
@@ -132,24 +147,43 @@ newest down with a stored cursor. Delete: `delete_attachment` and
     The processor always writes new attributes straight after the tag name,
     so the marker sits at a known offset from `<img`; the tag end is found
     with a quote-aware scan. On any mismatch the marker is removed and the
-    tag stays unwrapped.
+    tag stays unwrapped. The tag start is the last `<` before the marker,
+    not a fixed offset: the processor orders attributes it inserts at one
+    offset by their text, so a new attribute can land before the marker.
+    Core runs the content image filter again over HTML that already holds
+    our `<picture>` (block theme templates, shortcode output inside
+    `the_content`) and passes it the bare `<img>`, so each wrapped image's
+    `src` and `srcset` are remembered for the request and a content-filter
+    image that matches is not wrapped a second time.
 13. **Attachment attribute path.** The attribute array is turned into a
     single tag, run through the same `ImageProcessor`, and read back, so it
     cannot disagree with the other paths. It never wraps (an array cannot
-    hold a `<picture>`); with wrapping on it corrects sizes only.
+    hold a `<picture>`); with wrapping on it corrects sizes only, and the
+    `wp_get_attachment_image` output filter then wraps the finished tag.
+    Featured images pass that filter before `post_thumbnail_html`, which
+    finds them inside `<picture>` and leaves them; the sizes value is
+    already the plugin's own, so case 8 stops a second correction.
 14. **LCP pass.** When the LCP fix is on, one extra read-only walk finds the
     candidate first, so a page with no candidate is left exactly as it was
     (case 62). Without the fix there is one walk.
 15. **Missing dimensions (case 63)** are filled only with the LCP fix on (the
     case sits in 4.9), from the local file. If one of the two is present, the
     other is computed from the file's aspect ratio.
-16. **Audit annotation.** The audit sends `X-Srcset-Truth-Audit`, an HMAC over
-    a five-minute window keyed by the site's nonce salt. A request carrying a
-    valid token gets `data-srcset-truth="template|slot|status"` on each image
-    and `Cache-Control: private, no-store`. Without it (for example a
-    full-page cache hit) the audit infers `unmapped` from a core default and
-    `authored` from a value the current map would not produce;
-    `invalid-spec` needs the annotation.
+16. **Audit annotation.** The audit sends `X-Srcset-Truth-Audit`: HMAC-SHA256
+    over a five-minute window number, truncated to 128 bits, under a key
+    derived from the nonce salt with its own label (so it never equals a
+    core nonce). The server accepts the current and the previous window
+    (at most ten minutes of replay), checks the length first and compares
+    with `hash_equals`. Only code that holds the salts can mint a token, so
+    an unauthenticated visitor cannot get annotated output. A request with a
+    valid token gets `data-srcset-truth="template|slot|status"` on each
+    image, `Cache-Control: private, no-store, max-age=0` and
+    `DONOTCACHEPAGE`, so page-cache plugins that read the buffer instead of
+    the headers skip it too. The notes hold nothing secret (template and
+    slot names), so a misconfigured proxy that caches one anyway leaks
+    nothing. Without a token (for example a full-page cache hit) the audit
+    infers `unmapped` from a core default and `authored` from a value the
+    current map would not produce; `invalid-spec` needs the annotation.
 17. **Audit pick rule.** The smallest candidate whose density reaches the DPR,
     else the largest (the specification's rule). `no-candidate-near-slot` is
     raised when the chosen candidate is more than 1.5 times the needed device
@@ -171,8 +205,15 @@ newest down with a stored cursor. Delete: `delete_attachment` and
 22. **Uninstall** also deletes a `_srcset_truth` post meta key. 0.1.0 never
     writes it; the line keeps the PRD's promise for any build that did.
 23. **Static analysis.** PHPStan level 8 over `src/` with
-    `treatPhpDocTypesAsCertain: false`, because hook arguments come from
-    other code and the runtime checks must stay.
+    `treatPhpDocTypesAsCertain: false`. Kept at review: WordPress hook
+    callbacks are typed in docblocks from what core documents, but any
+    plugin or theme can pass anything through a filter, so the code keeps
+    `is_string()` and `is_array()` guards that PHPStan would otherwise
+    report as always true and push us to delete. Native parameter types
+    are used wherever the caller is our own code. PHPCS runs PSR-12 with
+    the line limit raised from 120 to 160 for translatable strings and
+    HTML fixtures, which stay whole on one line for translators and grep;
+    longer code lines are wrapped.
 24. **Tests** run against the real WordPress 6.4 HTML tag processor (the
     oldest supported version) loaded from the `johnpbloch/wordpress-core`
     dev dependency, with a small stub layer for everything else. Encoder

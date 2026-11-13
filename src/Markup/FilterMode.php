@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace IndianOpinion\SrcsetTruth\Markup;
 
+use IndianOpinion\SrcsetTruth\Plugin;
 use IndianOpinion\SrcsetTruth\Request;
 
 /**
@@ -58,6 +59,35 @@ final class FilterMode
         }
 
         return $attr;
+    }
+
+    /**
+     * wp_get_attachment_image: the finished tag of any attachment image a
+     * theme prints. The attribute filter above cannot add elements, so with
+     * <picture> wrapping on (the default) this is where those images are
+     * wrapped. Featured images come through here first; the thumbnail
+     * filter then finds them inside <picture> and leaves them.
+     *
+     * @param mixed $html
+     * @param mixed $attachmentId
+     * @param mixed $size
+     * @return mixed
+     */
+    public static function attachmentImage($html, $attachmentId = 0, $size = null)
+    {
+        if (!is_string($html) || $html === '' || !Plugin::pictureWrap() || !Request::isFrontHtml()) {
+            return $html;
+        }
+        $base = ['attachment_id' => (int) $attachmentId, 'source' => 'attachment'];
+        if (is_string($size) || is_array($size)) {
+            $base['size'] = $size;
+            $src = (int) $attachmentId > 0 ? wp_get_attachment_image_src((int) $attachmentId, $size) : false;
+            if (is_array($src) && isset($src[1])) {
+                $base['image_width'] = (int) $src[1];
+            }
+        }
+
+        return self::fragment($html, $base);
     }
 
     /**

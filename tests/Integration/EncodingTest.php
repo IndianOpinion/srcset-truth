@@ -251,6 +251,40 @@ final class EncodingTest extends TestCase
         self::assertSame(2, $fake->calls);
     }
 
+    public function testSkipLedgerKeepsConcurrentWritesAndStaysCapped(): void
+    {
+        $a = $this->jpeg('2026/11/a.jpg');
+        $b = $this->jpeg('2026/11/b.jpg');
+        SkipLedger::record($a, 'not-beneficial');
+        // Another process (an upload during a long backfill) adds a record
+        // after this one loaded the ledger.
+        $stored = get_option(SkipLedger::OPTION);
+        self::assertIsArray($stored);
+        $stored['2026/11/other.jpg'] = ['m' => 1, 's' => 1, 'r' => 'encode-error', 't' => time()];
+        \WPStub::$options[SkipLedger::OPTION] = $stored;
+        SkipLedger::record($b, 'colour-profile');
+        $after = get_option(SkipLedger::OPTION);
+        self::assertIsArray($after);
+        self::assertArrayHasKey('2026/11/other.jpg', $after, 'a write must not drop records it did not load');
+        self::assertSame('not-beneficial', SkipLedger::reason($a));
+        self::assertSame('colour-profile', SkipLedger::reason($b));
+
+        // Growth bound: the oldest record goes first past the cap.
+        $full = [];
+        for ($i = 0; $i < SkipLedger::CAP; $i++) {
+            $full['old/' . $i . '.jpg'] = ['m' => 1, 's' => 1, 'r' => 'encode-error', 't' => 1000 + $i];
+        }
+        \WPStub::$options[SkipLedger::OPTION] = $full;
+        SkipLedger::reset();
+        SkipLedger::record($a, 'not-beneficial');
+        $capped = get_option(SkipLedger::OPTION);
+        self::assertIsArray($capped);
+        self::assertCount(SkipLedger::CAP, $capped);
+        self::assertArrayNotHasKey('old/0.jpg', $capped);
+        self::assertArrayHasKey('old/1.jpg', $capped);
+        self::assertSame('not-beneficial', SkipLedger::reason($a));
+    }
+
     public function testT30NoPartialFileOnWriteFailure(): void
     {
         $partial = null;

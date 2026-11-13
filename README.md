@@ -113,7 +113,7 @@ The constant `SRCSET_TRUTH_DISABLE` set to `true` in `wp-config.php` turns the w
 | `srcset_truth_webp_enabled` | bool | | the setting |
 | `srcset_truth_webp_quality` | int 1 to 100 | kind (`photo`, `graphic`, `animated`), MIME | 82, 80, 72 |
 | `srcset_truth_webp_sizes` | list of size names | attachment ID | `medium`, `medium_large`, `large` |
-| `srcset_truth_picture_wrap` | bool | | false: rewrite candidates in place |
+| `srcset_truth_picture_wrap` | bool | | true: wrap in `<picture>`; false rewrites candidates in place (drops browsers without WebP) |
 | `srcset_truth_picture_css` | bool | | true: print `picture.srcset-truth{display:contents}` when wrapping |
 | `srcset_truth_should_wrap` | bool | tag HTML, context | true (gates WebP for one tag in either strategy) |
 | `srcset_truth_skip_classes` | list | | `[]` |
@@ -174,7 +174,7 @@ Slot names are 1 to 40 lower case letters, digits and hyphens; others throw `Inv
 
 1. **Sizes.** On a front-end HTML request, every image passes one classifier, whichever way it arrives (content filter, post thumbnail, attachment attributes, or the page buffer). The classifier recognises core's default `(max-width: Wpx) 100vw, Wpx` (with or without `auto, `). It resolves a template key and a slot, looks the pair up in the width map, compiles and validates the value, and caps the last length at the image's own width so a map written for big images never inflates small ones. Anything it is unsure of keeps core's value.
 2. **WebP siblings.** On upload, the plugin writes `photo-768x432.jpg.webp` next to `photo-768x432.jpg` for the main file and the `medium`, `medium_large` and `large` sizes. Type comes from the file signature, not the name. Writes are atomic (temporary file, then rename). A sibling that is not smaller than its original is deleted and not tried again until the original changes. The backfill walks the whole library from the newest ID down, in a 45 s budget, one run at a time.
-3. **Serving.** By default the plugin rewrites the image's own candidates: each `srcset` candidate (and `src`) that has a fresh sibling gets the sibling URL, in the same position with the same descriptor; candidates without one keep the original URL, so the browser's width choice does not change. Only JPEG, PNG and GIF originals are mapped; WebP, AVIF and SVG candidates are left alone. With `srcset_truth_picture_wrap` the plugin wraps the image in `<picture>` with a `<source type="image/webp">` instead and leaves the `<img>` untouched. Pages never encode: they only check whether a sibling exists, once per file per request.
+3. **Serving.** The plugin wraps the image in `<picture>` with a `<source type="image/webp">` and leaves the `<img>` exactly as it was, so a browser without WebP falls back to the original. The `<source>` lists the same candidates in the same order with the same descriptors: each candidate that has a fresh sibling gets the sibling URL, and one without keeps the original URL, so the browser's width choice does not change. Only JPEG, PNG and GIF originals are mapped; WebP, AVIF and SVG candidates are left alone. Returning `false` from `srcset_truth_picture_wrap` rewrites the `<img>`'s own `srcset` and `src` in place instead, which adds no element but hands WebP to every browser: use it only if you accept that browsers without WebP (Safari before 14, older Android WebViews) show broken images. Pages never encode: they only check whether a sibling exists, once per file per request.
 4. **Caches.** The HTML is the same for every visitor: no `Vary: Accept`, no user-agent sniffing. Each format has its own URL, so a CDN caches `.jpg` and `.jpg.webp` separately. The plugin never purges; hook `srcset_truth_sibling_created` if you want to.
 5. **LCP fix** (buffer mode, off by default). The first image that looks like a content photo (600 px or wider, aspect ratio 1.2 to 2.2, no logo, avatar or icon marker) gets `fetchpriority="high"` and no `loading`; every other image gets `loading="lazy"`; duplicate attributes are collapsed, and a matching `<link rel="preload">` goes before `</head>`. If no image qualifies, nothing changes.
 
@@ -196,7 +196,7 @@ wp srcset-truth remove-siblings --yes [--attachment=<id>]
 
 `audit` fetches one page of this site (never another host, never a redirect to another host) and reports, per image, the candidate a browser would pick under core's `sizes` in the original format (before) and under the emitted `sizes` in WebP where offered (after), with bytes and flags. The pick rule is the specification's: the smallest candidate whose density reaches the device pixel ratio. Flags: `unmapped`, `authored`, `invalid-spec`, `no-candidate-near-slot` (with the missing width), `no-sibling`, `not-beneficial`, `lazy-lcp`, `unsized`. It exits 1 when the page cannot be fetched or is not HTML.
 
-The audit sends a short-lived signed header; when the page is rendered fresh, images carry a `data-srcset-truth` note with template, slot and status, and the response is marked `private, no-store` so no cache keeps it. A page served from a full-page cache has no notes; the audit then infers what it can.
+The audit sends a short-lived signed header (HMAC-SHA256 keyed from the site's salts, valid for at most ten minutes, compared in constant time), so only WP-CLI on the same site can ask for annotations; a visitor cannot. When the page is rendered fresh, images carry a `data-srcset-truth` note with template, slot and status, and the response is marked `private, no-store` and defines `DONOTCACHEPAGE`, so neither a page-cache plugin nor a header-respecting proxy keeps it. If your proxy cache ignores `Cache-Control` and does not key on request headers, exclude requests carrying `X-Srcset-Truth-Audit` from it. A page served from a full-page cache has no notes; the audit then infers what it can.
 
 JSON shape:
 
@@ -218,8 +218,8 @@ JSON shape:
 
 - It does not create or regenerate sub-sizes. If the right width is missing from `srcset`, the audit says so (`no-candidate-near-slot`).
 - No AVIF in 0.1.0.
-- Default WebP serving rewrites the image's own URLs, which every current browser renders. Browsers without WebP (Safari before 14) need the opt-in `<picture>` wrapping.
-- In filter mode, `wp_get_attachment_image()` output outside post thumbnails can be rewritten but not wrapped in `<picture>`; buffer mode reaches it.
+- WebP is served through `<picture>`, which changes the element tree around the image (see the CSS question below). The in-place alternative avoids that but breaks images in browsers without WebP.
+- In filter mode, images a theme prints with its own `<img>` markup are not reached; buffer mode reaches them. Images printed with `wp_get_attachment_image()` are wrapped through its output filter.
 - Uploads offloaded to an object store fail the file check, so originals are served unless you answer `srcset_truth_has_sibling` from your own index.
 - Image CDNs that resize on the fly are left alone.
 
@@ -227,7 +227,7 @@ JSON shape:
 
 **Nothing changed after activating it.** That is by design. Supply a width map (or pick the grid preset); without one, core's value is the safest answer.
 
-**Will it break my theme's CSS?** The default path does not add elements. If you opt into `<picture>`, selectors like `.card > img` no longer match; the plugin prints `picture.srcset-truth{display:contents}` so flex and grid layouts keep working, but child selectors still need updating.
+**Will it break my theme's CSS?** Usually not. The plugin prints `picture.srcset-truth{display:contents}` (filter `srcset_truth_picture_css`), so the `<picture>` generates no box and flex and grid layouts treat the `<img>` as a direct child. Child selectors such as `.card > img` and `:first-child` rules no longer match the `<img>`; update them to `.card img`, or return `false` from `srcset_truth_picture_wrap` if you accept losing browsers without WebP.
 
 **Does it slow pages down?** No encoding ever happens on a page request. Pages do at most one file check per candidate per request.
 

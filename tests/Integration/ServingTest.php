@@ -9,6 +9,7 @@ use IndianOpinion\SrcsetTruth\Files\Siblings;
 use IndianOpinion\SrcsetTruth\Markup\BufferProcessor;
 use IndianOpinion\SrcsetTruth\Markup\FilterMode;
 use IndianOpinion\SrcsetTruth\Markup\Srcset;
+use IndianOpinion\SrcsetTruth\Markup\Wrapper;
 use IndianOpinion\SrcsetTruth\Plugin;
 use IndianOpinion\SrcsetTruth\Tests\TestCase;
 
@@ -17,7 +18,7 @@ use function IndianOpinion\SrcsetTruth\sibling_url;
 
 /**
  * PRD 4.8, 4.10, 4.11: acceptance tests 43 to 52, 60, 62 to 64, plus the
- * default type-aware srcset rewriting.
+ * opt-in in-place srcset rewriting.
  */
 final class ServingTest extends TestCase
 {
@@ -42,6 +43,11 @@ final class ServingTest extends TestCase
         $this->filter('srcset_truth_picture_wrap', static fn (): bool => true);
     }
 
+    private function inPlace(): void
+    {
+        $this->filter('srcset_truth_picture_wrap', static fn (): bool => false);
+    }
+
     public function testSiblingNaming(): void
     {
         self::assertSame('/u/photo.jpg.webp', sibling_path('/u/photo.jpg'));
@@ -52,8 +58,33 @@ final class ServingTest extends TestCase
         self::assertSame($this->url('2026/11/photo-768x432.jpg.webp'), sibling_url($this->url('2026/11/photo-768x432.jpg')));
     }
 
-    public function testDefaultRewritesCandidatesInPlace(): void
+    public function testDefaultWrapsAndLeavesTheImgUntouched(): void
     {
+        $this->siblings('large', 'medium_large', 'medium');
+        $tag = $this->cardTag();
+        $out = (string) FilterMode::contentImage($tag, '', 7);
+        self::assertStringStartsWith('<picture class="srcset-truth"><source type="image/webp" srcset="', $out);
+        self::assertStringEndsWith($tag . '</picture>', $out, 'a browser without WebP still gets the original img');
+    }
+
+    public function testWrapperFindsTheTagWhateverPrecedesTheMarker(): void
+    {
+        // The processor orders attributes it inserts at one offset by text, so
+        // a new attribute (a class, say) can land before the marker.
+        $html = '<p><img class="x" data-srcset-truth-wrap="3" src="a.jpg" alt="a > b"></p>';
+        $out = Wrapper::apply($html, [3 => ['srcset' => 'a.jpg.webp', 'sizes' => null]]);
+        self::assertSame(
+            '<p><picture class="srcset-truth"><source type="image/webp" srcset="a.jpg.webp"><img class="x" src="a.jpg" alt="a > b"></picture></p>',
+            $out
+        );
+        // A marker that is not inside an img is removed and nothing is wrapped.
+        $bad = '<p><span data-srcset-truth-wrap="4">x</span></p>';
+        self::assertSame('<p><span>x</span></p>', Wrapper::apply($bad, [4 => ['srcset' => 'a.jpg.webp', 'sizes' => null]]));
+    }
+
+    public function testInPlaceRewriteIsOptIn(): void
+    {
+        $this->inPlace();
         $this->siblings('large', 'medium_large', 'medium');
         $out = (string) FilterMode::contentImage($this->cardTag(), '', 7);
         self::assertStringNotContainsString('<picture', $out);
@@ -92,7 +123,8 @@ final class ServingTest extends TestCase
         $this->siblings('main');
         $single = '<img src="' . $this->url('2026/11/photo.jpg') . '" alt="">';
         $out = (string) FilterMode::contentImage($single, '', 0);
-        self::assertSame('<picture class="srcset-truth"><source type="image/webp" srcset="' . $this->url('2026/11/photo.jpg.webp') . '">' . $single . '</picture>', $out);
+        $source = '<source type="image/webp" srcset="' . $this->url('2026/11/photo.jpg.webp') . '">';
+        self::assertSame('<picture class="srcset-truth">' . $source . $single . '</picture>', $out);
     }
 
     public function testT46SourceCarriesCorrectedSizes(): void
@@ -112,7 +144,10 @@ final class ServingTest extends TestCase
         $u = 'https://example.test/wp-content/uploads/2026/11/';
 
         return [
-            'a picture' => ['<picture><source srcset="' . $u . 'photo.jpg.webp"><img src="' . $u . 'photo-1024x576.jpg" srcset="' . $u . 'photo-1024x576.jpg 1024w"></picture>'],
+            'a picture' => [
+                '<picture><source srcset="' . $u . 'photo.jpg.webp">'
+                . '<img src="' . $u . 'photo-1024x576.jpg" srcset="' . $u . 'photo-1024x576.jpg 1024w"></picture>',
+            ],
             'b data uri' => ['<img src="data:image/gif;base64,R0lGOD" srcset="' . $u . 'photo-1024x576.jpg 1024w">'],
             'b svg' => ['<img src="' . $u . 'logo.svg">'],
             'b webp' => ['<img src="' . $u . 'photo.webp">'],
@@ -260,7 +295,8 @@ final class ServingTest extends TestCase
         $this->picture();
         $this->cardMap();
         $u = $this->url('2026/11/shot');
-        $tag = "<img src=\"{$u}-1024x576.webp\" srcset=\"{$u}-1024x576.webp 1024w, {$u}-300x169.webp 300w\" sizes=\"(max-width: 1024px) 100vw, 1024px\" class=\"size-large\">";
+        $tag = "<img src=\"{$u}-1024x576.webp\" srcset=\"{$u}-1024x576.webp 1024w, {$u}-300x169.webp 300w\""
+            . ' sizes="(max-width: 1024px) 100vw, 1024px" class="size-large">';
         $out = (string) FilterMode::contentImage($tag, '', 0);
         self::assertStringNotContainsString('<picture', $out);
         self::assertStringContainsString('sizes="(max-width: 767px) 92vw', $out);
@@ -283,19 +319,58 @@ final class ServingTest extends TestCase
         self::assertStringContainsString('.jpg.webp', $first, 'each format keeps its own URL');
     }
 
-    public function testPictureCssIsOptIn(): void
+    public function testPictureCssFollowsWrapping(): void
     {
-        ob_start();
-        Plugin::printPictureCss();
-        self::assertSame('', ob_get_clean());
-        $this->picture();
         ob_start();
         Plugin::printPictureCss();
         self::assertStringContainsString('picture.srcset-truth{display:contents}', (string) ob_get_clean());
+        $this->filter('srcset_truth_picture_css', static fn (): bool => false);
+        ob_start();
+        Plugin::printPictureCss();
+        self::assertSame('', ob_get_clean());
+        $this->filter('srcset_truth_picture_css', static fn (): bool => true);
+        $this->inPlace();
+        ob_start();
+        Plugin::printPictureCss();
+        self::assertSame('', ob_get_clean());
     }
 
-    public function testAttachmentAttributesRewriteButNeverWrap(): void
+    public function testAttachmentImagesAreWrappedThroughTheImageFilter(): void
     {
+        $this->siblings('large');
+        $attr = [
+            'src' => $this->url('2026/11/photo-1024x576.jpg'),
+            'srcset' => $this->url('2026/11/photo-1024x576.jpg') . ' 1024w',
+            'class' => 'attachment-large',
+        ];
+        // The attribute array cannot hold a <picture>: it is left for the image filter.
+        self::assertSame($attr, FilterMode::attachmentAttributes($attr, (object) ['ID' => 7], 'large'));
+        $tag = '<img src="' . $attr['src'] . '" srcset="' . $attr['srcset'] . '" class="attachment-large" alt="">';
+        $out = (string) FilterMode::attachmentImage($tag, 7, 'large');
+        $source = '<source type="image/webp" srcset="' . $this->url('2026/11/photo-1024x576.jpg.webp') . ' 1024w">';
+        self::assertSame('<picture class="srcset-truth">' . $source . $tag . '</picture>', $out);
+        // The thumbnail filter then sees it inside <picture> and leaves it.
+        self::assertSame($out, FilterMode::thumbnail($out, 1, 7, 'large'));
+    }
+
+    public function testContentFilterDoesNotWrapAnImageTwice(): void
+    {
+        // Block themes run the content image filter over the whole template,
+        // and the_content runs it over shortcode output: both hand it the
+        // bare <img> of a <picture> this plugin already printed.
+        $this->siblings('large', 'medium_large', 'medium');
+        $tag = $this->cardTag();
+        $out = (string) FilterMode::thumbnail($tag, 1, 7, 'large');
+        self::assertStringStartsWith('<picture class="srcset-truth">', $out);
+        $again = str_replace('<img ', '<img decoding="async" ', $tag);
+        self::assertSame($again, FilterMode::contentImage($again, 'template', 7));
+        Plugin::resetRequest();
+        self::assertStringStartsWith('<picture', (string) FilterMode::contentImage($again, 'template', 7), 'a new request starts clean');
+    }
+
+    public function testInPlaceAttachmentAttributesRewriteAndImageFilterStandsBack(): void
+    {
+        $this->inPlace();
         $this->siblings('large');
         $attr = [
             'src' => $this->url('2026/11/photo-1024x576.jpg'),
@@ -304,8 +379,7 @@ final class ServingTest extends TestCase
         ];
         $out = FilterMode::attachmentAttributes($attr, (object) ['ID' => 7], 'large');
         self::assertStringEndsWith('.jpg.webp 1024w', (string) $out['srcset']);
-        $this->picture();
-        Plugin::resetRequest();
-        self::assertSame($attr, FilterMode::attachmentAttributes($attr, (object) ['ID' => 7], 'large'));
+        $tag = '<img src="' . $attr['src'] . '" alt="">';
+        self::assertSame($tag, FilterMode::attachmentImage($tag, 7, 'large'));
     }
 }

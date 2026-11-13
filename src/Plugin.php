@@ -19,6 +19,7 @@ use IndianOpinion\SrcsetTruth\Layout\TemplateResolver;
 use IndianOpinion\SrcsetTruth\Layout\WidthMap;
 use IndianOpinion\SrcsetTruth\Markup\BufferProcessor;
 use IndianOpinion\SrcsetTruth\Markup\FilterMode;
+use IndianOpinion\SrcsetTruth\Markup\Wrapper;
 
 /**
  * Wiring: every hook the plugin adds is registered here and nowhere else.
@@ -48,6 +49,7 @@ final class Plugin
         self::$booted = true;
 
         add_filter('wp_get_attachment_image_attributes', [FilterMode::class, 'attachmentAttributes'], 20, 3);
+        add_filter('wp_get_attachment_image', [FilterMode::class, 'attachmentImage'], 20, 3);
         add_filter('wp_content_img_tag', [FilterMode::class, 'contentImage'], 20, 3);
         add_filter('post_thumbnail_html', [FilterMode::class, 'thumbnail'], 20, 4);
         add_action('template_redirect', [self::class, 'startBuffer'], 1);
@@ -81,12 +83,14 @@ final class Plugin
     }
 
     /**
-     * Picture wrapping is opt-in. The default serves WebP by rewriting the
-     * candidates of the img itself.
+     * WebP is served through <picture> by default (PRD goal 3, lesson 6), so
+     * a browser without WebP falls back to the img. Returning false from the
+     * filter rewrites the img's own candidates in place instead, which only
+     * suits sites that accept dropping browsers without WebP.
      */
     public static function pictureWrap(): bool
     {
-        return (bool) apply_filters('srcset_truth_picture_wrap', false);
+        return (bool) apply_filters('srcset_truth_picture_wrap', true);
     }
 
     public static function bufferEnabled(): bool
@@ -123,7 +127,10 @@ final class Plugin
         }
         if (($phase & PHP_OUTPUT_HANDLER_FINAL) === 0 || ($phase & PHP_OUTPUT_HANDLER_START) === 0) {
             self::$streamed = true;
-            Logger::once('buffer-streamed', 'Output was flushed before the end of the request (another buffer or a streaming response); buffer mode skipped this page.');
+            Logger::once(
+                'buffer-streamed',
+                'Output was flushed before the end of the request (another buffer or a streaming response); buffer mode skipped this page.'
+            );
 
             return $buffer;
         }
@@ -153,10 +160,18 @@ final class Plugin
         return BufferProcessor::process($buffer);
     }
 
+    /**
+     * An annotated (audit) response must never reach a shared cache: it is
+     * sent no-store, and DONOTCACHEPAGE tells page-cache plugins that read
+     * the output buffer rather than the headers to skip it.
+     */
     public static function sendHeaders(): void
     {
         if (self::auditMode()) {
             Response::privateNoStore();
+            if (!defined('DONOTCACHEPAGE')) {
+                define('DONOTCACHEPAGE', true);
+            }
         }
     }
 
@@ -169,14 +184,19 @@ final class Plugin
     }
 
     /**
-     * Audit token: an HMAC over a five-minute window, so only WP-CLI on this
-     * site can ask a page to annotate its images.
+     * Audit token: HMAC-SHA256 over a five-minute window, truncated to 128
+     * bits, so only code holding this site's salts (WP-CLI on this site) can
+     * ask a page to annotate its images. The key is derived from the nonce
+     * salt under a label of its own, so a token can never stand in for a
+     * core nonce or the other way round. A token is accepted for its own
+     * window and the one before (at most ten minutes).
      */
     public static function auditToken(?int $time = null): string
     {
         $window = intdiv($time ?? time(), 300);
+        $key = hash_hmac('sha256', 'srcset-truth-audit-key', wp_salt('nonce'));
 
-        return substr(hash_hmac('sha256', 'srcset-truth-audit|' . $window, wp_salt('nonce')), 0, 32);
+        return substr(hash_hmac('sha256', 'srcset-truth-audit|' . $window, $key), 0, 32);
     }
 
     public static function auditMode(): bool
@@ -209,6 +229,7 @@ final class Plugin
         Siblings::reset();
         Uploads::reset();
         SkipLedger::reset();
+        Wrapper::reset();
         Response::reset();
         self::$audit = null;
         self::$streamed = false;

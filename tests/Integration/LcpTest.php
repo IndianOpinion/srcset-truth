@@ -24,7 +24,10 @@ final class LcpTest extends TestCase
         $u = 'https://example.test/wp-content/uploads/2026/11/';
         $this->logo = '<img src="' . $u . 'site-logo.png" width="700" height="135" class="custom-logo" alt="Site" loading="lazy">';
         $this->thumb = '<img src="' . $u . 'ticker-150x150.jpg" width="150" height="150" loading="lazy">';
-        $this->photo = '<img src="' . $u . 'photo-1024x576.jpg" srcset="' . $u . 'photo-1024x576.jpg 1024w, ' . $u . 'photo-768x432.jpg 768w" sizes="auto, (max-width: 1024px) 100vw, 1024px" width="1024" height="576" loading="lazy" loading="lazy" decoding="sync" alt="News photo">';
+        $this->photo = '<img src="' . $u . 'photo-1024x576.jpg"'
+            . ' srcset="' . $u . 'photo-1024x576.jpg 1024w, ' . $u . 'photo-768x432.jpg 768w"'
+            . ' sizes="auto, (max-width: 1024px) 100vw, 1024px" width="1024" height="576"'
+            . ' loading="lazy" loading="lazy" decoding="sync" alt="News photo">';
         $this->second = '<img src="' . $u . 'other-1024x576.jpg" width="1024" height="576" fetchpriority="high">';
     }
 
@@ -87,7 +90,11 @@ final class LcpTest extends TestCase
     public function testT56PreloadMirrorsChosenImage(): void
     {
         $out = BufferProcessor::process($this->page($this->logo . $this->photo));
-        self::assertMatchesRegularExpression('#<link rel="preload" as="image" fetchpriority="high" href="[^"]+photo-1024x576\.jpg" imagesrcset="[^"]+1024w, [^"]+768w" imagesizes="\(max-width: 1024px\) 100vw, 1024px">\n</head>#', $out);
+        self::assertMatchesRegularExpression(
+            '#<link rel="preload" as="image" fetchpriority="high" href="[^"]+photo-1024x576\.jpg"'
+            . ' imagesrcset="[^"]+1024w, [^"]+768w" imagesizes="\(max-width: 1024px\) 100vw, 1024px">\n</head>#',
+            $out
+        );
 
         // Wrapped: WebP list and type.
         $this->filter('srcset_truth_picture_wrap', static fn (): bool => true);
@@ -95,7 +102,11 @@ final class LcpTest extends TestCase
         $this->fakeSibling($this->uploads . '/2026/11/photo-1024x576.jpg');
         \IndianOpinion\SrcsetTruth\Plugin::resetRequest();
         $out = BufferProcessor::process($this->page($this->photo));
-        self::assertMatchesRegularExpression('#<link [^>]*href="[^"]+photo-1024x576\.jpg\.webp" imagesrcset="[^"]+photo-1024x576\.jpg\.webp 1024w, [^"]+768x432\.jpg 768w"[^>]* type="image/webp">#', $out);
+        self::assertMatchesRegularExpression(
+            '#<link [^>]*href="[^"]+photo-1024x576\.jpg\.webp"'
+            . ' imagesrcset="[^"]+photo-1024x576\.jpg\.webp 1024w, [^"]+768x432\.jpg 768w"[^>]* type="image/webp">#',
+            $out
+        );
 
         $existing = '<link rel="preload" as="image" href="/hero.jpg">';
         $out = BufferProcessor::process("<html><head>{$existing}</head><body>{$this->photo}</body></html>");
@@ -103,6 +114,24 @@ final class LcpTest extends TestCase
         $noHead = BufferProcessor::process($this->page($this->photo, false));
         self::assertStringNotContainsString('preload', $noHead);
         self::assertStringContainsString('fetchpriority="high"', $noHead);
+    }
+
+    public function testWrapSurvivesAttributesTheLcpFixAdds(): void
+    {
+        // loading, decoding, width and height are new attributes here, written
+        // by the processor at the same offset as the wrap marker.
+        $this->jpeg('2026/11/later.jpg', 160, 90);
+        $this->fakeSibling($this->uploads . '/2026/11/later.jpg');
+        \IndianOpinion\SrcsetTruth\Plugin::resetRequest();
+        $later = '<img src="https://example.test/wp-content/uploads/2026/11/later.jpg" alt="later">';
+        $out = BufferProcessor::process($this->page($this->photo . $later));
+        self::assertStringNotContainsString('data-srcset-truth-wrap', $out);
+        self::assertMatchesRegularExpression(
+            '#<picture class="srcset-truth"><source type="image/webp" srcset="[^"]+later\.jpg\.webp">'
+            . '<img [^>]*loading="lazy"[^>]*src="[^"]+later\.jpg"[^>]*></picture>#',
+            $out
+        );
+        self::assertStringContainsString('width="160"', $out);
     }
 
     public function testT57NoQualifyingImageNoChanges(): void

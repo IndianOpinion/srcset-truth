@@ -21,7 +21,7 @@ final class ImageProcessor
      * @param array<string, mixed> $base Known context: attachment_id, size, source, image_width.
      * @param array{loading?: ?string, inside_picture?: bool, fill_dimensions?: bool, wrap_id?: int, no_wrap?: bool} $options
      *        loading: null leaves loading attributes alone; "lcp" or "lazy" applies the LCP fix.
-     * @return array{wrap: ?array{srcset: string, sizes: ?string}, attrs: array<string, string|true>, status: string}
+     * @return array{wrap: ?array{srcset: string, sizes: ?string, identity: string}, attrs: array<string, string|true>, status: string}
      */
     public static function process(\WP_HTML_Tag_Processor $p, array $base, array $options = []): array
     {
@@ -76,14 +76,20 @@ final class ImageProcessor
         }
 
         $wrap = null;
-        $webpAllowed = empty($options['inside_picture']) && !(!empty($options['no_wrap']) && Plugin::pictureWrap());
+        $identity = Wrapper::identity(
+            is_string($attrs['src'] ?? null) ? $attrs['src'] : '',
+            is_string($attrs['srcset'] ?? null) ? $attrs['srcset'] : ''
+        );
+        $webpAllowed = empty($options['inside_picture'])
+            && !(!empty($options['no_wrap']) && Plugin::pictureWrap())
+            && !(($context['source'] ?? '') === 'content' && Wrapper::wasWrapped($identity));
         if ($webpAllowed) {
             $plan = WebpPlanner::plan($attrs, $context);
             if ($plan !== null) {
                 if (Plugin::pictureWrap()) {
                     // Case 50: the source carries the final sizes of the img.
                     $finalSizes = is_string($attrs['sizes'] ?? null) ? $attrs['sizes'] : null;
-                    $wrap = ['srcset' => $plan['source_srcset'], 'sizes' => $finalSizes];
+                    $wrap = ['srcset' => $plan['source_srcset'], 'sizes' => $finalSizes, 'identity' => $identity];
                     $p->set_attribute(self::WRAP_MARKER, (string) ($options['wrap_id'] ?? 0));
                 } else {
                     if ($plan['srcset'] !== null) {

@@ -14,6 +14,14 @@ namespace IndianOpinion\SrcsetTruth\Files;
  * uploads, with the source modification time and size. A changed original
  * no longer matches its entry, so it is evaluated again. One option, not
  * autoloaded, capped so it cannot grow without bound.
+ *
+ * Bound: CAP entries of about 140 serialised bytes each, so the option stays
+ * near 1.4 MB at most; past the cap the oldest records go first. Writes
+ * re-read the stored option first, so a long backfill or WP-CLI run does
+ * not overwrite records another process added since it started. Two
+ * processes writing in the same instant can still lose one record (there is
+ * no row lock); a lost or dropped record only means that file is tried
+ * again once, never that a sibling is served wrongly.
  */
 final class SkipLedger
 {
@@ -47,7 +55,7 @@ final class SkipLedger
 
     public static function record(string $path, string $reason): void
     {
-        $entries = self::load();
+        $entries = self::load(true);
         clearstatcache(true, $path);
         $entries[Uploads::relative($path)] = [
             'm' => is_file($path) ? (int) filemtime($path) : -1,
@@ -64,8 +72,11 @@ final class SkipLedger
 
     public static function forget(string $path): void
     {
-        $entries = self::load();
         $key = Uploads::relative($path);
+        if (!isset(self::load()[$key])) {
+            return;
+        }
+        $entries = self::load(true);
         if (isset($entries[$key])) {
             unset($entries[$key]);
             self::save($entries);
@@ -88,9 +99,13 @@ final class SkipLedger
     /**
      * @return array<string, array{m: int, s: int, r: string, t: int}>
      */
-    private static function load(): array
+    private static function load(bool $fresh = false): array
     {
-        if (self::$entries === null) {
+        if ($fresh && function_exists('wp_cache_delete')) {
+            // Non-autoloaded options are cached under their own key.
+            wp_cache_delete(self::OPTION, 'options');
+        }
+        if (self::$entries === null || $fresh) {
             $stored = get_option(self::OPTION, []);
             $clean = [];
             foreach (is_array($stored) ? $stored : [] as $key => $entry) {

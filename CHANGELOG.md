@@ -26,8 +26,12 @@ All notable changes to this project are documented here. The format follows
   animated GIFs, atomic writes, size and frame limits, keep-only-if-smaller.
 - Background backfill: cursor from the newest ID, 45 s budget, single-run
   lock, full-pass tracking.
-- Serving: type-aware rewriting of `srcset` and `src` in place (default), or
-  `<picture>` wrapping behind `srcset_truth_picture_wrap`.
+- Serving: `<picture>` wrapping with a WebP `<source>` (default), so browsers
+  without WebP fall back to the untouched `<img>`; type-aware in-place
+  rewriting of `srcset` and `src` is an opt-in (`srcset_truth_picture_wrap`
+  returning `false`) because it breaks images in those browsers. Images
+  printed with `wp_get_attachment_image()` are wrapped through its output
+  filter.
 - Buffer mode for theme-hard-coded tags, and an opt-in LCP fix with preload.
 - WP-CLI: `audit`, `generate`, `status`, `map`, `remove-siblings`.
 - Site Health checks, an administrator slot probe, a Settings, Media section.
