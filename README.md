@@ -235,6 +235,10 @@ JSON shape:
 
 **Another plugin already serves WebP.** Turn off WebP serving here and keep sizes correction. Tags already inside `<picture>` are never touched.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests and pull request rules.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
