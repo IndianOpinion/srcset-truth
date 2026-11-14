@@ -1,0 +1,42 @@
+{
+    "name": "indianopinion/srcset-truth",
+    "description": "WordPress plugin: corrects the sizes attribute for images painted into fixed slots, serves WebP siblings, and audits page image weight.",
+    "type": "wordpress-plugin",
+    "license": "MIT",
+    "keywords": ["wordpress", "srcset", "sizes", "webp", "responsive-images", "performance"],
+    "homepage": "https://github.com/IndianOpinion/srcset-truth",
+    "support": {
+        "issues": "https://github.com/IndianOpinion/srcset-truth/issues",
+        "email": "hello@indianopinion.org"
+    },
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "johnpbloch/wordpress-core": "6.4.*",
+        "php-stubs/wordpress-stubs": "^6.4",
+        "php-stubs/wp-cli-stubs": "^2.10",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^10.5",
+        "squizlabs/php_codesniffer": "^3.10"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "IndianOpinion\\SrcsetTruth\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse --memory-limit=1G",
+        "cs": "phpcs",
+        "cbf": "phpcbf",
+        "check": ["@cs", "@stan", "@test"]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {},
+        "platform": {
+            "php": "8.1.0"
+        }
+    }
+}

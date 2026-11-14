@@ -1,0 +1,14 @@
+parameters:
+    level: 8
+    paths:
+        - src
+        - srcset-truth.php
+        - uninstall.php
+    bootstrapFiles:
+        - tests/phpstan-bootstrap.php
+    scanFiles:
+        - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+        - vendor/php-stubs/wp-cli-stubs/wp-cli-stubs.php
+    # Hook arguments come from other plugins and themes, so runtime type
+    # checks stay even where the docblock promises a type.
+    treatPhpDocTypesAsCertain: false
